@@ -1,0 +1,68 @@
+{
+  "name": "Playlist",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the playlist"
+    },
+    "description": {
+      "type": "string",
+      "description": "A brief description of the playlist"
+    },
+    "videoIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of Video entity IDs belonging to this playlist",
+      "default": []
+    },
+    "coverImage": {
+      "type": "string",
+      "description": "URL of the playlist cover image",
+      "default": ""
+    },
+    "createdDate": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date when the playlist was created"
+    },
+    "isKidFriendly": {
+      "type": "boolean",
+      "description": "Whether this playlist is approved for kids mode",
+      "default": false
+    },
+    "shareCode": {
+      "type": "string",
+      "description": "Unique code for sharing this playlist (null if not shared)",
+      "nullable": true
+    },
+    "isShared": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this playlist is currently shared"
+    },
+    "isPublicLibrary": {
+      "type": "boolean",
+      "default": false,
+      "description": "Is this playlist part of the public, admin-curated library?"
+    },
+    "libraryCategory": {
+      "type": "string",
+      "description": "The category for this playlist within the public library (e.g., Education, Music)",
+      "nullable": true
+    },
+    "libraryIcons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "The icon keys for this playlist (e.g., KCV, SKZ)"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

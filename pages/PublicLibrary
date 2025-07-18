@@ -1,0 +1,287 @@
+import React, { useState, useEffect } from 'react';
+import { Playlist } from '@/entities/Playlist';
+import { User } from '@/entities/User';
+import { useToast } from '@/components/ui/use-toast';
+import { ArrowLeft, Loader2, Layers, KeyRound } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import PlaylistCard from '../components/PlaylistCard';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { useTranslation } from '../components/LanguageProvider';
+
+export default function PublicLibrary() {
+  const [categories, setCategories] = useState({});
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const { t } = useTranslation();
+
+  // New state for authorization
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [accessCode, setAccessCode] = useState('');
+  const [authError, setAuthError] = useState('');
+  
+  const ACCESS_CODE = 'VVPL2024';
+  const AUTH_SESSION_KEY = 'publicLibraryAuthorized';
+
+  useEffect(() => {
+    const checkAuthorization = async () => {
+      setLoadingAuth(true);
+      
+      if (sessionStorage.getItem(AUTH_SESSION_KEY) === 'true') {
+        setIsAuthorized(true);
+        setLoadingAuth(false);
+        return;
+      }
+
+      try {
+        const user = await User.me();
+        if (user && user.role === 'admin') {
+          setIsAuthorized(true);
+          sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
+        }
+      } catch (error) {
+        // Not an admin, will require code
+      } finally {
+        setLoadingAuth(false);
+      }
+    };
+    checkAuthorization();
+  }, []);
+
+  // Category icon configuration
+  const categoryIcons = {
+    'KCV': { 
+      icon: 'KCV', 
+      color: 'bg-blue-500 text-white',
+      name: 'Kosher Content Viewing',
+      description: t.kcv_description || 'Religiously appropriate content'
+    },
+    'SKZ': { 
+      icon: 'SKZ', 
+      color: 'bg-green-500 text-white',
+      name: 'Safe Kids Zone',
+      description: t.skz_description || 'Child-friendly and educational content'
+    }
+  };
+
+  const getCategoryIconInfo = (iconKey) => {
+    return categoryIcons[iconKey] || null;
+  };
+  
+  const getUniqueIconsForCategory = (category) => {
+    const playlistsInCategory = categories[category];
+    if (!playlistsInCategory) return [];
+    const allIcons = playlistsInCategory.flatMap(p => p.libraryIcons || []);
+    return [...new Set(allIcons)];
+  };
+
+  useEffect(() => {
+    if (isAuthorized) {
+      loadPublicPlaylists();
+    }
+  }, [isAuthorized, t]);
+
+  const loadPublicPlaylists = async () => {
+    setLoading(true);
+    try {
+      const publicPlaylists = await Playlist.filter({ isPublicLibrary: true });
+      
+      const grouped = publicPlaylists.reduce((acc, playlist) => { 
+        const category = playlist.libraryCategory || (t.uncategorized || 'Uncategorized');
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(playlist);
+        return acc;
+      }, {});
+      
+      setCategories(grouped);
+    } catch (error) {
+      toast({ 
+        title: t.error || "Error", 
+        description: t.could_not_load_public_library || "Could not load the public library.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCodeSubmit = (e) => {
+    e.preventDefault();
+    if (accessCode === ACCESS_CODE) {
+      setIsAuthorized(true);
+      sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
+      setAuthError('');
+    } else {
+      setAuthError(t.invalid_access_code || 'Invalid access code. Please try again.');
+    }
+  };
+
+  if (loadingAuth) {
+    return (
+      <div className="text-center py-20">
+        <Loader2 className="h-10 w-10 animate-spin mx-auto text-blue-500" />
+        <p className="mt-4 text-gray-600">{t.verifying_access || "Verifying access..."}</p>
+      </div>
+    );
+  }
+  
+  if (!isAuthorized) {
+    return (
+      <div className="container mx-auto p-4 flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+        <div className="max-w-md w-full text-center p-8 bg-white rounded-2xl shadow-xl border">
+          <KeyRound className="h-16 w-16 text-blue-500 mx-auto mb-6" />
+          <h1 className="text-2xl font-bold mb-3">{t.access_restricted_title || "Access Restricted"}</h1>
+          <p className="text-gray-600 mb-6">
+            {t.access_restricted_desc || "This page is currently under construction. Please enter the access code provided by the administrator to view it."}
+          </p>
+          <form onSubmit={handleCodeSubmit} className="space-y-4">
+            <Input
+              type="text"
+              placeholder={t.enter_access_code || "Enter Access Code"}
+              value={accessCode}
+              onChange={(e) => {
+                setAccessCode(e.target.value);
+                if (authError) setAuthError('');
+              }}
+              className="text-center h-12 text-lg"
+            />
+            {authError && <p className="text-red-500 text-sm animate-shake">{authError}</p>}
+            <Button type="submit" className="w-full h-11">
+              {t.submit_code || "Submit"}
+            </Button>
+          </form>
+          <Link to={createPageUrl("Home")} className="block mt-6 text-sm text-gray-500 hover:underline">
+            {t.back_to_home || "Back to Home"}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-20">
+        <Loader2 className="h-10 w-10 animate-spin mx-auto" />
+        <p className="mt-4 text-gray-600">{t.loading || "Loading..."}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4">
+      <div className="flex items-center gap-3 mb-6">
+        <Link to={createPageUrl("Home")}>
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <h1 className="text-3xl font-bold">{t.public_library || "Public Library"}</h1>
+      </div>
+      
+      {Object.keys(categories).length > 0 && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">{t.category_symbols || "Category Symbols"}:</h3>
+          <div className="space-y-3">
+            {Object.values(categoryIcons).map((config) => (
+              <div key={config.name} className="flex items-center gap-3 p-2">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ${config.color} flex-shrink-0`}>
+                  {config.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-800">{config.name}</div>
+                  <div className="text-xs text-gray-600">{config.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <p className="text-gray-500 mb-8">
+        {t.browse_curated_playlists || "Browse playlists curated by our team. Click a category to explore."}
+      </p>
+      
+      {Object.keys(categories).length === 0 ? (
+        <div className="text-center py-12 border-2 border-dashed rounded-lg">
+          <Layers className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-4 text-xl font-medium text-gray-800">
+            {t.coming_soon || "Coming Soon!"}
+          </h3>
+          <p className="mt-2 text-gray-500">
+            {t.public_library_empty || "The public library is currently empty. Check back later for curated playlists."}
+          </p>
+        </div>
+      ) : selectedCategory ? (
+        <div>
+          <div className="flex items-center gap-3 mb-6">
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setSelectedCategory(null)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-3xl font-bold">{selectedCategory}</h1>
+            <div className="flex items-center">
+              {getUniqueIconsForCategory(selectedCategory).map((iconKey, index) => {
+                const iconInfo = getCategoryIconInfo(iconKey);
+                if (!iconInfo) return null;
+                return (
+                  <div key={iconKey} className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${iconInfo.color}`} style={{ marginLeft: index > 0 ? '-10px' : '0' }}>
+                    {iconInfo.icon}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {categories[selectedCategory].map(playlist => (
+              <PlaylistCard key={playlist.id} playlist={playlist} showLibraryIcons={true} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {Object.keys(categories).sort().map(category => {
+            const uniqueIcons = getUniqueIconsForCategory(category);
+            return (
+              <Card
+                key={category}
+                className="hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer relative overflow-visible"
+                onClick={() => setSelectedCategory(category)}
+              >
+                {uniqueIcons.length > 0 && (
+                  <div className="absolute -top-3 -right-3 flex items-center z-10">
+                    {uniqueIcons.map((iconKey, index) => {
+                       const iconInfo = getCategoryIconInfo(iconKey);
+                       if (!iconInfo) return null;
+                       return (
+                         <div
+                          key={iconKey}
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ${iconInfo.color} shadow-lg border-2 border-white`}
+                          style={{ marginLeft: index > 0 ? '-16px' : '0' }}
+                         >
+                          {iconInfo.icon}
+                         </div>
+                       )
+                    })}
+                  </div>
+                )}
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xl pr-6">{category}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-500">
+                    {categories[category].length} {t.playlists || "playlists"}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,65 @@
+{
+  "name": "UserSettings",
+  "type": "object",
+  "properties": {
+    "theme": {
+      "type": "string",
+      "enum": [
+        "default",
+        "dark",
+        "blue",
+        "green",
+        "purple",
+        "warm",
+        "cool"
+      ],
+      "default": "default",
+      "description": "User's preferred visual theme"
+    },
+    "videoPlayerSize": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "large",
+        "theater"
+      ],
+      "default": "normal",
+      "description": "Preferred video player size"
+    },
+    "gridSize": {
+      "type": "string",
+      "enum": [
+        "compact",
+        "comfortable",
+        "spacious"
+      ],
+      "default": "comfortable",
+      "description": "Grid layout density preference"
+    },
+    "enableAnimations": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to show animations"
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "en",
+        "zh",
+        "es",
+        "hi",
+        "ar",
+        "pt",
+        "id",
+        "fr",
+        "ja",
+        "he",
+        "ru",
+        "de"
+      ],
+      "default": "en",
+      "description": "User's preferred language"
+    }
+  },
+  "required": []
+}

@@ -1,0 +1,80 @@
+{
+  "name": "Photo",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the photo"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the photo",
+      "nullable": true
+    },
+    "fileUrl": {
+      "type": "string",
+      "description": "URL of the uploaded photo file"
+    },
+    "thumbnailUrl": {
+      "type": "string",
+      "description": "URL of the thumbnail version",
+      "nullable": true
+    },
+    "originalFileName": {
+      "type": "string",
+      "description": "Original name of the uploaded file"
+    },
+    "fileSize": {
+      "type": "number",
+      "description": "Size of the photo file in bytes"
+    },
+    "dimensions": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "nullable": true
+    },
+    "dateAdded": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date when the photo was added"
+    },
+    "dateTaken": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date when the photo was taken (if available)",
+      "nullable": true
+    },
+    "location": {
+      "type": "string",
+      "description": "Location where photo was taken",
+      "nullable": true
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags associated with the photo",
+      "default": []
+    },
+    "favorite": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the photo is marked as favorite"
+    }
+  },
+  "required": [
+    "title",
+    "fileUrl",
+    "originalFileName",
+    "fileSize",
+    "dateAdded"
+  ]
+}

@@ -1,0 +1,278 @@
+import React, { useState, useEffect } from "react";
+import { Video } from "@/entities/Video";
+import { Playlist } from "@/entities/Playlist"; // Added import for Playlist entity
+import { Category } from "@/entities/Category"; // Added import for Category entity
+import VideoCard from "../components/VideoCard";
+import FunLoader from "../components/FunLoader";
+import { Button } from "@/components/ui/button";
+import { Link, useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { useToast } from "@/components/ui/use-toast";
+import VideoShuffleButton from "../components/VideoShuffleButton";
+import VideoForm from "../components/VideoForm"; // Added import for VideoForm
+import AddToPlaylistDialog from "../components/AddToPlaylistDialog"; // Added import for AddToPlaylistDialog
+import { useTranslation } from "../components/LanguageProvider";
+
+export default function WatchLater() {
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const { t } = useTranslation();
+
+  // State for VideoForm (editing)
+  const [isEditing, setIsEditing] = useState(false);
+  const [videoToEdit, setVideoToEdit] = useState(null);
+  const [allCategories, setAllCategories] = useState([]);
+  const [allPlaylists, setAllPlaylists] = useState([]);
+
+  // State for AddToPlaylistDialog
+  const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
+  const [videoToAdd, setVideoToAdd] = useState(null);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    loadVideos();
+    // These are needed for the modals
+    loadAllPlaylists();
+    loadAllCategories();
+  }, []);
+
+  const loadVideos = async () => {
+    setLoading(true);
+    try {
+      const allVideos = await Video.list();
+      const watchLaterVideos = allVideos.filter(video => video.watchStatus === "watch-later");
+      setVideos(watchLaterVideos);
+    } catch (error) {
+      console.error("Error loading videos:", error);
+      toast({
+        title: t.error || "Error",
+        description: t.error_loading_videos || "Failed to load videos",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAllPlaylists = async () => {
+    try {
+      // FIXED: Use Playlist entity directly instead of Video.related.playlist
+      const playlists = await Playlist.list();
+      setAllPlaylists(playlists);
+    } catch (error) {
+      console.error("Error loading playlists:", error);
+      // If Playlist entity doesn't exist or fails, set empty array
+      setAllPlaylists([]);
+    }
+  };
+  
+  const loadAllCategories = async () => {
+    try {
+      // FIXED: Use Category entity directly instead of Video.related.category
+      const categories = await Category.list();
+      setAllCategories(categories);
+    } catch (error) {
+      console.error("Error loading categories:", error);
+      // If Category entity doesn't exist or fails, set empty array
+      setAllCategories([]);
+    }
+  };
+
+  const handleMarkAsWatched = async (video) => {
+    try {
+      await Video.update(video.id, { watchStatus: "completed" });
+      toast({
+        title: t.marked_as_watched_title || "Marked as Watched",
+        description: (t.marked_as_watched_desc || '"{videoTitle}" has been moved to your watched videos.').replace('{{videoTitle}}', video.title),
+      });
+      // Remove from the current list
+      setVideos(videos.filter(v => v.id !== video.id));
+    } catch (error) {
+      console.error("Error updating video status:", error);
+      toast({
+        title: t.error || "Error",
+        description: t.error_updating_status || "Failed to update video status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveFromWatchLater = async (video) => {
+    try {
+      await Video.update(video.id, { watchStatus: "in-progress" });
+      toast({
+        title: t.removed_from_watch_later_title || "Removed from Watch Later",
+        description: (t.removed_from_watch_later_desc || '"{videoTitle}" has been removed from your Watch Later list.').replace('{{videoTitle}}', video.title),
+      });
+      // Remove from the current list
+      setVideos(videos.filter(v => v.id !== video.id));
+    } catch (error) {
+      console.error("Error updating video status:", error);
+      toast({
+        title: t.error || "Error",
+        description: t.error_updating_status || "Failed to update video status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditVideo = (video) => {
+    setVideoToEdit(video);
+    setIsEditing(true);
+  };
+
+  const handleVideoSaved = () => {
+    setIsEditing(false);
+    setVideoToEdit(null);
+    loadVideos();
+  };
+
+  const handleToggleFavorite = async (video) => {
+    try {
+      await Video.update(video.id, { favorite: !video.favorite });
+      setVideos(prevVideos => 
+        prevVideos.map(v => v.id === video.id ? { ...v, favorite: !v.favorite } : v)
+      );
+      toast({
+        title: video.favorite ? t.removed_from_favorites || "Removed from Favorites" : t.added_to_favorites || "Added to Favorites",
+      });
+    } catch (error) {
+      console.error("Error updating favorite status:", error);
+      toast({
+        title: t.error || "Error",
+        description: t.error_updating_favorite_status || "Failed to update favorite status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleWatchLater = async (video) => {
+    // This function will remove it from the list, so it's a bit different.
+    // We already have `handleRemoveFromWatchLater` for this purpose.
+    handleRemoveFromWatchLater(video);
+  };
+
+  const handleToggleKidFriendly = async (video) => {
+    try {
+      await Video.update(video.id, { kidFriendly: !video.kidFriendly });
+      setVideos(prevVideos => 
+        prevVideos.map(v => v.id === video.id ? { ...v, kidFriendly: !v.kidFriendly } : v)
+      );
+      toast({
+        title: video.kidFriendly ? t.removed_from_kids_mode || "Removed from Kids Mode" : t.added_to_kids_mode || "Added to Kids Mode",
+      });
+    } catch (error) {
+      console.error("Error updating kid-friendly status:", error);
+      toast({
+        title: t.error || "Error",
+        description: t.error_updating_kid_friendly_status || "Failed to update kid-friendly status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddToPlaylist = (video) => {
+    setVideoToAdd(video);
+    setIsAddToPlaylistOpen(true);
+  };
+
+  const handleVideoAddedToPlaylist = (playlistName) => {
+    setIsAddToPlaylistOpen(false);
+    setVideoToAdd(null);
+    toast({
+      title: t.videos_added || "Video Added",
+      description: `Video added to playlist: ${playlistName}`
+    });
+  };
+
+  const handleDeleteVideo = async (video) => {
+    if (window.confirm((t.confirm_delete_video || 'Are you sure you want to permanently delete "{{videoTitle}}"?').replace('{{videoTitle}}', video.title))) {
+      try {
+        await Video.delete(video.id);
+        toast({
+          title: t.video_deleted || "Video Deleted",
+          description: (t.video_deleted_desc || '"{videoTitle}" has been deleted.').replace('{{videoTitle}}', video.title),
+        });
+        loadVideos();
+      } catch (error) {
+        console.error("Error deleting video:", error);
+        toast({
+          title: t.error || "Error",
+          description: t.error_deleting_video || "Failed to delete video",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  if (loading) {
+    return <FunLoader text={t.loading_videos || "Loading videos..."} />;
+  }
+
+  return (
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">{t.watch_later_title || "Watch Later"}</h1>
+        {videos.length > 0 && <VideoShuffleButton videos={videos} />}
+      </div>
+      
+      {videos.length === 0 ? (
+        <div className="text-center py-20">
+          <div className="mx-auto bg-gray-100 dark:bg-gray-800 rounded-full h-24 w-24 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="mt-6 text-xl font-medium text-gray-900 dark:text-gray-100">{t.no_videos_in_watch_later || "No videos in Watch Later"}</h2>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{t.watch_later_empty_desc || "Videos you mark for watching later will appear here"}</p>
+          <Button asChild className="mt-6">
+            <Link to={createPageUrl("Home")}>{t.browse_your_videos || "Browse Your Videos"}</Link>
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          {videos.map(video => (
+            <VideoCard
+              key={video.id}
+              video={video}
+              onToggleFavorite={() => handleToggleFavorite(video)}
+              onToggleWatchLater={() => handleToggleWatchLater(video)}
+              onToggleKidFriendly={() => handleToggleKidFriendly(video)}
+              onAddToPlaylist={() => handleAddToPlaylist(video)}
+              onEdit={() => handleEditVideo(video)}
+              onDelete={() => handleDeleteVideo(video)}
+              additionalActions={[
+                { label: t.mark_as_watched_title || "Mark as Watched", onClick: () => handleMarkAsWatched(video) },
+                { label: t.removed_from_watch_later_title || "Remove from list", onClick: () => handleRemoveFromWatchLater(video) },
+              ]}
+              watchStatus="watch-later"
+            />
+          ))}
+        </div>
+      )}
+
+      {isEditing && (
+        <VideoForm
+          isOpen={isEditing}
+          onClose={() => setIsEditing(false)}
+          videoData={videoToEdit}
+          onSave={handleVideoSaved}
+          allCategories={allCategories}
+          allPlaylists={allPlaylists}
+        />
+      )}
+
+      {isAddToPlaylistOpen && (
+        <AddToPlaylistDialog
+          isOpen={isAddToPlaylistOpen}
+          onClose={() => setIsAddToPlaylistOpen(false)}
+          video={videoToAdd}
+          onVideoAdded={handleVideoAddedToPlaylist}
+          allPlaylists={allPlaylists}
+        />
+      )}
+    </div>
+  );
+}

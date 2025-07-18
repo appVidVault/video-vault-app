@@ -1,0 +1,486 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Album } from "@/entities/Album";
+import { Photo } from "@/entities/Photo";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { 
+  Play, 
+  Pause, 
+  SkipForward, 
+  SkipBack, 
+  X,
+  Volume2,
+  VolumeX
+} from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import FunLoader from "../components/FunLoader";
+
+export default function Slideshow() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const albumId = urlParams.get('albumId');
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  const [album, setAlbum] = useState(null);
+  const [photos, setPhotos] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [nextIndex, setNextIndex] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+  const [musicVolume, setMusicVolume] = useState([50]);
+  const [isMuted, setIsMuted] = useState(false);
+  const [transitionState, setTransitionState] = useState('current'); // 'current', 'transitioning'
+  
+  const audioRef = useRef(null);
+  const intervalRef = useRef(null);
+  const controlsTimeoutRef = useRef(null);
+  const slideshowRef = useRef(null);
+
+  useEffect(() => {
+    if (albumId) {
+      loadAlbumAndPhotos();
+    }
+    
+    // Enter fullscreen by default
+    enterFullscreen();
+    
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [albumId]);
+
+  useEffect(() => {
+    if (isPlaying && photos.length > 0) {
+      const duration = (album?.slideshowSettings?.transitionDuration || 4) * 1000;
+      intervalRef.current = setInterval(() => {
+        nextPhoto();
+      }, duration);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isPlaying, photos.length, currentIndex, album?.slideshowSettings]);
+
+  // Auto-hide controls
+  useEffect(() => {
+    const resetControlsTimeout = () => {
+      setShowControls(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+    };
+
+    const handleMouseMove = () => resetControlsTimeout();
+    const handleKeyPress = (e) => {
+      resetControlsTimeout();
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          setIsPlaying(prev => !prev);
+          break;
+        case 'ArrowRight':
+          nextPhoto();
+          break;
+        case 'ArrowLeft':
+          previousPhoto();
+          break;
+        case 'Escape':
+          exitSlideshow();
+          break;
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('keydown', handleKeyPress);
+    resetControlsTimeout();
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('keydown', handleKeyPress);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, []);
+
+  const loadAlbumAndPhotos = async () => {
+    try {
+      const albumData = await Album.get(albumId);
+      if (!albumData) {
+        toast({ title: "Album not found", variant: "destructive" });
+        navigate(createPageUrl("PhotoGallery"));
+        return;
+      }
+
+      setAlbum(albumData);
+
+      if (albumData.photoIds && albumData.photoIds.length > 0) {
+        const allPhotos = await Photo.list();
+        let albumPhotos = allPhotos.filter(photo => 
+          albumData.photoIds.includes(photo.id)
+        );
+        
+        if (albumData.slideshowSettings?.shuffle) {
+          albumPhotos = albumPhotos.sort(() => Math.random() - 0.5);
+        }
+        
+        setPhotos(albumPhotos);
+        setNextIndex(albumPhotos.length > 1 ? 1 : 0);
+        
+        if (albumData.musicFileUrl && audioRef.current) {
+          audioRef.current.src = albumData.musicFileUrl;
+          audioRef.current.volume = musicVolume[0] / 100;
+          audioRef.current.play().catch(console.error);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading album:", error);
+      toast({ title: "Error loading slideshow", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const nextPhoto = () => {
+    if (transitionState === 'transitioning') return;
+    
+    setTransitionState('transitioning');
+    
+    setTimeout(() => {
+      setCurrentIndex(prev => {
+        const next = prev + 1;
+        if (next >= photos.length) {
+          return album?.slideshowSettings?.loop !== false ? 0 : prev;
+        }
+        return next;
+      });
+      
+      setNextIndex(prev => {
+        const current = currentIndex + 1 >= photos.length ? 
+          (album?.slideshowSettings?.loop !== false ? 0 : currentIndex) : 
+          currentIndex + 1;
+        const next = current + 1;
+        if (next >= photos.length) {
+          return album?.slideshowSettings?.loop !== false ? 0 : current;
+        }
+        return next;
+      });
+      
+      setTransitionState('current');
+    }, 800);
+  };
+
+  const previousPhoto = () => {
+    if (transitionState === 'transitioning') return;
+    
+    setTransitionState('transitioning');
+    
+    setTimeout(() => {
+      setCurrentIndex(prev => prev === 0 ? photos.length - 1 : prev - 1);
+      
+      setNextIndex(prev => {
+        const current = currentIndex === 0 ? photos.length - 1 : currentIndex - 1;
+        const next = current + 1;
+        if (next >= photos.length) {
+          return album?.slideshowSettings?.loop !== false ? 0 : current;
+        }
+        return next;
+      });
+      
+      setTransitionState('current');
+    }, 800);
+  };
+
+  const enterFullscreen = () => {
+    if (slideshowRef.current?.requestFullscreen) {
+      slideshowRef.current.requestFullscreen();
+    }
+  };
+
+  const exitFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+  };
+
+  const exitSlideshow = () => {
+    if (audioRef.current) audioRef.current.pause();
+    exitFullscreen();
+    navigate(createPageUrl(`ViewAlbum?id=${albumId}`));
+  };
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      audioRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const handleVolumeChange = (value) => {
+    setMusicVolume(value);
+    if (audioRef.current) {
+      audioRef.current.volume = value[0] / 100;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center">
+        <div className="text-center text-white">
+          <FunLoader />
+          <p className="mt-4 text-lg">Loading slideshow...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!album || photos.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center">
+        <div className="text-center text-white">
+          <p className="text-xl mb-4">No photos found in this album</p>
+          <Button onClick={exitSlideshow} variant="outline">Back to Album</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentPhoto = photos[currentIndex];
+  const nextPhoto_obj = photos[nextIndex];
+  const transitionEffect = album?.slideshowSettings?.transitionEffect || 'crossfade';
+
+  // Enhanced transition styles
+  const getTransitionStyle = (effect, isNext = false) => {
+    const baseClass = "absolute inset-0 w-full h-full object-cover";
+    
+    switch (effect) {
+      case 'crossfade':
+        return `${baseClass} transition-opacity duration-1000 ease-in-out ${
+          transitionState === 'transitioning' 
+            ? (isNext ? 'opacity-100' : 'opacity-0') 
+            : (isNext ? 'opacity-0' : 'opacity-100')
+        }`;
+        
+      case 'slide':
+        return `${baseClass} transition-transform duration-800 ease-in-out ${
+          transitionState === 'transitioning'
+            ? (isNext ? 'translate-x-0' : '-translate-x-full')
+            : (isNext ? 'translate-x-full' : 'translate-x-0')
+        }`;
+        
+      case 'zoom':
+        return `${baseClass} transition-all duration-1000 ease-in-out ${
+          transitionState === 'transitioning'
+            ? (isNext ? 'scale-100 opacity-100' : 'scale-110 opacity-0')
+            : (isNext ? 'scale-95 opacity-0' : 'scale-100 opacity-100')
+        }`;
+        
+      case 'flip':
+        return `${baseClass} transition-transform duration-800 ease-in-out transform-gpu ${
+          transitionState === 'transitioning'
+            ? (isNext ? 'rotateY-0' : 'rotateY-180')
+            : (isNext ? 'rotateY-180' : 'rotateY-0')
+        } backface-visibility-hidden`;
+        
+      case 'cube':
+        return `${baseClass} transition-transform duration-1000 ease-in-out transform-gpu ${
+          transitionState === 'transitioning'
+            ? (isNext ? 'rotateY-0 translateZ-0' : 'rotateY-90 translateZ-250')
+            : (isNext ? 'rotateY-90 translateZ-250' : 'rotateY-0 translateZ-0')
+        }`;
+        
+      case 'spiral':
+        return `${baseClass} transition-all duration-1200 ease-in-out ${
+          transitionState === 'transitioning'
+            ? (isNext ? 'scale-100 rotate-0 opacity-100' : 'scale-0 rotate-180 opacity-0')
+            : (isNext ? 'scale-0 rotate-180 opacity-0' : 'scale-100 rotate-0 opacity-100')
+        }`;
+        
+      default:
+        return `${baseClass} transition-opacity duration-800 ease-in-out ${
+          transitionState === 'transitioning' 
+            ? (isNext ? 'opacity-100' : 'opacity-0') 
+            : (isNext ? 'opacity-0' : 'opacity-100')
+        }`;
+    }
+  };
+
+  return (
+    <div ref={slideshowRef} className="fixed inset-0 bg-black flex items-center justify-center cursor-none overflow-hidden">
+      {/* Audio */}
+      {album.musicFileUrl && (
+        <audio ref={audioRef} loop muted={isMuted} />
+      )}
+
+      {/* Enhanced Photo Display */}
+      <div 
+        className="relative w-full h-full flex items-center justify-center perspective-1000"
+        style={{ 
+          perspective: '1000px',
+          perspectiveOrigin: 'center center'
+        }}
+      >
+        {/* Background gradient for better contrast */}
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-black to-gray-900" />
+        
+        {/* Photo container with enhanced effects */}
+        <div className="relative w-full h-full max-w-[90vw] max-h-[90vh] mx-auto flex items-center justify-center">
+          {/* Current Photo */}
+          <img
+            src={currentPhoto.fileUrl}
+            alt={currentPhoto.title}
+            className={getTransitionStyle(transitionEffect, false)}
+            style={{
+              filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.8))',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain'
+            }}
+          />
+          
+          {/* Next Photo (for transitions) */}
+          {nextPhoto_obj && (
+            <img
+              src={nextPhoto_obj.fileUrl}
+              alt={nextPhoto_obj.title}
+              className={getTransitionStyle(transitionEffect, true)}
+              style={{
+                filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.8))',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain'
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Enhanced Controls */}
+      <div className={`absolute inset-0 transition-all duration-500 ${
+        showControls ? 'opacity-100' : 'opacity-0'
+      }`}>
+        {/* Top Controls with glassmorphism */}
+        <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-50">
+          <div className="backdrop-blur-xl bg-black/30 rounded-2xl px-6 py-3 border border-white/10">
+            <h2 className="text-xl font-bold text-white">{album.name}</h2>
+            <p className="text-sm text-white/80">
+              {currentIndex + 1} of {photos.length} • {currentPhoto.title}
+            </p>
+          </div>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={exitSlideshow}
+            className="text-white hover:bg-white/20 backdrop-blur-xl bg-black/30 rounded-2xl border border-white/10 h-12 w-12"
+          >
+            <X className="h-6 w-6" />
+          </Button>
+        </div>
+
+        {/* Bottom Controls */}
+        <div className="absolute bottom-6 left-6 right-6 z-50">
+          {/* Progress Bar */}
+          <div className="w-full bg-white/20 h-1 rounded-full backdrop-blur-sm mb-6">
+            <div 
+              className="bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 h-1 rounded-full transition-all duration-300"
+              style={{ width: `${((currentIndex + 1) / photos.length) * 100}%` }}
+            />
+          </div>
+
+          {/* Control Buttons */}
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="backdrop-blur-xl bg-black/30 rounded-2xl px-6 py-3 flex items-center gap-4 border border-white/10">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={previousPhoto}
+                className="text-white hover:bg-white/20 h-10 w-10"
+                disabled={transitionState === 'transitioning'}
+              >
+                <SkipBack className="h-5 w-5" />
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="text-white hover:bg-white/20 h-12 w-12"
+              >
+                {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={nextPhoto}
+                className="text-white hover:bg-white/20 h-10 w-10"
+                disabled={transitionState === 'transitioning'}
+              >
+                <SkipForward className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Music Controls */}
+          {album.musicFileUrl && (
+            <div className="flex items-center justify-center">
+              <div className="backdrop-blur-xl bg-black/30 rounded-2xl px-6 py-3 flex items-center gap-4 border border-white/10">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleMute}
+                  className="text-white hover:bg-white/20 h-8 w-8"
+                >
+                  {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                </Button>
+                
+                <div className="w-32">
+                  <Slider
+                    value={musicVolume}
+                    onValueChange={handleVolumeChange}
+                    max={100}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Effect Indicator */}
+        <div className="absolute top-24 left-6 z-50">
+          <div className="backdrop-blur-xl bg-black/30 rounded-xl px-4 py-2 text-sm text-white border border-white/10">
+            {transitionEffect === 'crossfade' && '✨ Crossfade'}
+            {transitionEffect === 'slide' && '🎢 Slide'}
+            {transitionEffect === 'zoom' && '🔍 Zoom In/Out'}
+            {transitionEffect === 'flip' && '🔄 Flip'}
+            {transitionEffect === 'cube' && '📦 Cube Rotate'}
+            {transitionEffect === 'spiral' && '🌀 Spiral'}
+          </div>
+        </div>
+      </div>
+
+      {/* Custom CSS for advanced effects */}
+      <style jsx>{`
+        .perspective-1000 {
+          perspective: 1000px;
+        }
+        .backface-visibility-hidden {
+          backface-visibility: hidden;
+        }
+        .transform-gpu {
+          transform: translateZ(0);
+        }
+      `}</style>
+    </div>
+  );
+}

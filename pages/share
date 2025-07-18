@@ -1,0 +1,196 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { Video } from "@/entities/Video";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CheckCircle, Share2, ArrowLeft, List, Grid, Loader2, AlertTriangle } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import VideoCard from "../components/VideoCard";
+import VideoFilter from "../components/VideoFilter";
+import SelectionManager from "../components/SelectionManager";
+import SharePlaylistDialog from "../components/SharePlaylistDialog"; // Changed from VideoShareModal
+import { useTranslation } from "../components/LanguageProvider";
+import { useToast } from "@/components/ui/use-toast";
+
+export default function Share() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    search: "",
+    category: "all",
+    watchStatus: "all",
+    sort: "newest",
+    favoritesOnly: false,
+    kidFriendlyOnly: false,
+  });
+  const [selectedVideoIds, setSelectedVideoIds] = useState([]); // Store only IDs
+  const [selectedVideoObjects, setSelectedVideoObjects] = useState([]); // Store full objects for SelectionManager
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState("grid");
+
+  const loadVideos = useCallback(async () => {
+    setLoading(true);
+    try {
+      const allVideos = await Video.list();
+      setVideos(allVideos);
+    } catch (error) {
+      console.error("Error loading videos:", error);
+      toast({ title: t.error_loading_videos_title, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast, t]);
+
+  useEffect(() => {
+    loadVideos();
+  }, [loadVideos]);
+
+  useEffect(() => {
+    // Update selectedVideoObjects whenever selectedVideoIds or videos change
+    const objects = videos.filter(video => selectedVideoIds.includes(video.id));
+    setSelectedVideoObjects(objects);
+  }, [selectedVideoIds, videos]);
+
+  const handleToggleSelect = (video) => {
+    setSelectedVideoIds(prev => {
+      const isSelected = prev.includes(video.id);
+      return isSelected 
+        ? prev.filter(id => id !== video.id)
+        : [...prev, video.id];
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedVideoIds([]);
+  };
+
+  const removeFromSelection = (videoId) => {
+    setSelectedVideoIds(prev => prev.filter(id => id !== videoId));
+  };
+
+  const handleOpenShareModal = () => {
+    if (selectedVideoIds.length === 0) {
+      toast({ title: t.share_no_videos_selected_title, description: t.share_no_videos_selected_desc, variant: "warning" });
+      return;
+    }
+    setIsShareModalOpen(true);
+  };
+
+  const filteredVideos = videos
+    .filter(video => {
+      const searchLower = filters.search.toLowerCase();
+      const titleMatch = video.title.toLowerCase().includes(searchLower);
+      const channelMatch = video.channelTitle && video.channelTitle.toLowerCase().includes(searchLower);
+      const categoryMatch = filters.category === "all" || video.category === filters.category;
+      const watchStatusMatch = filters.watchStatus === "all" || video.watchStatus === filters.watchStatus;
+      const favoriteMatch = !filters.favoritesOnly || video.favorite;
+      const kidFriendlyMatch = !filters.kidFriendlyOnly || video.kidFriendly; // Added kidFriendly filter
+      return (titleMatch || channelMatch) && categoryMatch && watchStatusMatch && favoriteMatch && kidFriendlyMatch;
+    })
+    .sort((a, b) => {
+      if (filters.sort === "newest") return new Date(b.dateAdded) - new Date(a.dateAdded);
+      if (filters.sort === "oldest") return new Date(a.dateAdded) - new Date(b.dateAdded);
+      if (filters.sort === "title") return a.title.localeCompare(b.title);
+      return 0;
+    });
+
+  return (
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <Link to={createPageUrl("Home")} aria-label={t.back_to_home || "Back to Home"}>
+          <Button variant="ghost" size="icon" className="rounded-full">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">{t.share_videos_page_title || "Share Videos"}</h1>
+          <p className="text-gray-500 mt-1">{t.share_videos_page_subtitle || "Select videos to create and share a playlist."}</p>
+        </div>
+      </div>
+
+      <VideoFilter filters={filters} setFilters={setFilters} videos={videos} />
+      
+      <Tabs value={viewMode} onValueChange={setViewMode} className="mb-6">
+        <div className="flex justify-between items-center mb-1">
+            <p className="text-sm text-gray-500">
+                {filteredVideos.length} {filteredVideos.length === 1 ? t.video_singular || "video" : t.video_plural || "videos"}
+            </p>
+            <TabsList>
+                <TabsTrigger value="grid"><Grid className="h-4 w-4 mr-1.5"/>{t.grid_view || "Grid"}</TabsTrigger>
+                <TabsTrigger value="list"><List className="h-4 w-4 mr-1.5"/>{t.list_view || "List"}</TabsTrigger>
+            </TabsList>
+        </div>
+      </Tabs>
+
+      <div className="pb-32"> {/* Padding at bottom for SelectionManager */}
+        {loading ? (
+          <div className="flex justify-center items-center py-20">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+          </div>
+        ) : filteredVideos.length === 0 ? (
+          <div className="text-center py-16 border border-dashed rounded-lg">
+            <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
+            <h3 className="text-xl font-medium mb-2">{t.no_videos_found_title || "No Videos Found"}</h3>
+            <p className="text-gray-500 mb-6 max-w-md mx-auto">
+              {filters.search || filters.category !== "all" || filters.watchStatus !== "all" || filters.favoritesOnly || filters.kidFriendlyOnly
+                ? t.no_videos_found_filtered_desc || "Try adjusting your filters or add more videos to your collection."
+                : t.no_videos_found_empty_desc_share || "You don't have any videos to share yet. Add some videos first!"}
+            </p>
+            <Link to={createPageUrl("Add")}>
+              <Button>{t.add_videos_button || "Add Videos"}</Button>
+            </Link>
+          </div>
+        ) : (
+           <TabsContent value={viewMode} className="mt-0">
+             {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+                  {filteredVideos.map(video => (
+                    <VideoCard 
+                      key={video.id} 
+                      video={video}
+                      selectable={true}
+                      isSelected={selectedVideoIds.includes(video.id)}
+                      onSelectToggle={handleToggleSelect}
+                      // No favorite/delete/kid-friendly toggles on share page, keep it focused
+                    />
+                  ))}
+                </div>
+              ) : (
+                // Basic List View for Share Page
+                <div className="space-y-3">
+                  {filteredVideos.map(video => (
+                     <VideoCard 
+                      key={video.id} 
+                      video={video}
+                      selectable={true}
+                      isSelected={selectedVideoIds.includes(video.id)}
+                      onSelectToggle={handleToggleSelect}
+                    />
+                  ))}
+                </div>
+             )}
+           </TabsContent>
+        )}
+      </div>
+
+      <SelectionManager 
+        selectedVideos={selectedVideoObjects} // Pass full objects here
+        clearSelection={clearSelection}
+        removeFromSelection={removeFromSelection}
+        onShare={handleOpenShareModal}
+      />
+
+      <SharePlaylistDialog 
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        selectedVideoIds={selectedVideoIds} // Pass IDs for creating playlist
+        onPlaylistShared={() => {
+            setIsShareModalOpen(false);
+            setSelectedVideoIds([]); // Clear selection after successful share
+        }}
+      />
+    </div>
+  );
+}

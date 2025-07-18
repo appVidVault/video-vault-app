@@ -1,0 +1,82 @@
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Share2, X, MinusCircle } from "lucide-react";
+
+export default function SelectionManager({ 
+  selectedVideos,
+  clearSelection,
+  removeFromSelection,
+  onShare 
+}) {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (selectedVideos.length === 0) return null;
+  
+  return (
+    <div className="fixed bottom-0 inset-x-0 z-40 bg-white border-t shadow-lg">
+      <div className="container px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="px-2">
+              {selectedVideos.length} {selectedVideos.length === 1 ? "video" : "videos"} selected
+            </Badge>
+            
+            <Button 
+              variant="link" 
+              size="sm" 
+              className="text-sm font-normal"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? "Hide" : "Show"}
+            </Button>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={clearSelection}
+            >
+              Clear
+            </Button>
+            
+            <Button
+              size="sm"
+              onClick={onShare}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+          </div>
+        </div>
+        
+        {expanded && selectedVideos.length > 0 && (
+          <div className="mt-3 max-h-32 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {selectedVideos.map((video) => (
+              <div 
+                key={video.id}
+                className="flex items-center gap-2 bg-gray-50 rounded-md p-1.5 pr-2 text-sm"
+              >
+                <div className="w-10 h-6 flex-shrink-0">
+                  <img
+                    src={video.thumbnail || `https://i.ytimg.com/vi/${video.videoId}/default.jpg`}
+                    alt={video.title}
+                    className="w-full h-full object-cover rounded"
+                  />
+                </div>
+                <span className="truncate flex-1">{video.title}</span>
+                <button
+                  className="text-gray-400 hover:text-red-500"
+                  onClick={() => removeFromSelection(video.id)}
+                >
+                  <MinusCircle className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,79 @@
+import { createClient } from 'npm:@base44/sdk@0.1.0';
+
+const base44 = createClient({
+    appId: Deno.env.get('BASE44_APP_ID'),
+});
+
+// Main request handler
+Deno.serve(async (req) => {
+    try {
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+            return new Response('Unauthorized: Missing Authorization header', { status: 401 });
+        }
+        base44.auth.setToken(authHeader.replace('Bearer ', ''));
+
+        const formData = await req.formData();
+        const chunk = formData.get('chunk');
+        const chunkIndex = parseInt(formData.get('chunkIndex'), 10);
+        const totalChunks = parseInt(formData.get('totalChunks'), 10);
+        const fileName = formData.get('fileName');
+        const fileType = formData.get('fileType');
+        const fileId = formData.get('fileId');
+
+        if (!chunk || isNaN(chunkIndex) || isNaN(totalChunks) || !fileName || !fileType || !fileId) {
+            return new Response('Bad Request: Missing required form data fields', { status: 400 });
+        }
+
+        const chunkPath = `/tmp/${fileId}_${chunkIndex}`;
+        await Deno.writeFile(chunkPath, new Uint8Array(await chunk.arrayBuffer()));
+
+        // If this is the last chunk, assemble the file and upload to final storage
+        if (chunkIndex === totalChunks - 1) {
+            const assembledFile = await assembleChunks(fileId, totalChunks, fileType);
+            
+            const { file_url } = await base44.integrations.Core.UploadFile({ file: assembledFile, fileName });
+            
+            // Cleanup temporary chunks
+            await cleanupChunks(fileId, totalChunks);
+
+            return new Response(JSON.stringify({ 
+                status: 'completed', 
+                file_url: file_url 
+            }), {
+                headers: { 'Content-Type': 'application/json' },
+                status: 200,
+            });
+        }
+
+        // If not the last chunk, acknowledge success
+        return new Response(JSON.stringify({ status: 'chunk_uploaded' }), {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200,
+        });
+
+    } catch (error) {
+        console.error('Chunk upload error:', error);
+        return new Response(JSON.stringify({ 
+            status: 'error', 
+            message: error.message || 'An unknown error occurred during upload.' 
+        }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
+});
+
+async function assembleChunks(fileId, totalChunks, fileType) {
+    const chunkPaths = Array.from({ length: totalChunks }, (_, i) => `/tmp/${fileId}_${i}`);
+    const chunkBuffers = await Promise.all(chunkPaths.map(path => Deno.readFile(path)));
+    return new Blob(chunkBuffers, { type: fileType });
+}
+
+async function cleanupChunks(fileId, totalChunks) {
+    const cleanupPromises = [];
+    for (let i = 0; i < totalChunks; i++) {
+        cleanupPromises.push(Deno.remove(`/tmp/${fileId}_${i}`).catch(e => console.error(`Failed to remove chunk ${i} for ${fileId}:`, e)));
+    }
+    await Promise.all(cleanupPromises);
+}

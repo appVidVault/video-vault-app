@@ -1,0 +1,162 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft, Play, Loader2, ListChecks } from "lucide-react";
+import { SharedPlaylist } from "@/entities/SharedPlaylist";
+import { Video } from "@/entities/Video";
+import { createPageUrl } from "@/utils";
+import { useTranslation } from "../components/LanguageProvider";
+import { useToast } from "@/components/ui/use-toast";
+
+export default function SharedPlaylistPage() {
+  const [playlist, setPlaylist] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadPlaylist();
+  }, []);
+
+  const loadPlaylist = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get("code");
+      
+      if (!code) {
+        setError(t.shared_playlist_no_code_error || "No playlist code provided.");
+        setLoading(false);
+        return;
+      }
+
+      const playlists = await SharedPlaylist.filter({ shareCode: code }); // Use filter
+      
+      if (!playlists || playlists.length === 0) {
+        setError(t.shared_playlist_not_found_error || "Playlist not found or the code is invalid.");
+        setLoading(false);
+        return;
+      }
+      const foundPlaylist = playlists[0];
+      setPlaylist(foundPlaylist);
+
+      if (!foundPlaylist.videos || foundPlaylist.videos.length === 0) {
+        setVideos([]);
+        setLoading(false);
+        return;
+      }
+
+      // Load videos. This can be slow if many videos; consider pagination or optimized fetch if needed.
+      // For now, fetch all and filter.
+      const allVideos = await Video.list(); 
+      const playlistVideos = allVideos.filter(v => 
+        foundPlaylist.videos.includes(v.id)
+      );
+      
+      // Maintain order from playlist.videos if possible
+      const orderedVideos = foundPlaylist.videos.map(id => playlistVideos.find(v => v.id === id)).filter(Boolean);
+      setVideos(orderedVideos);
+
+    } catch (err) {
+      console.error("Error loading shared playlist:", err);
+      setError(t.shared_playlist_load_error || "An error occurred while loading the playlist.");
+      toast({ title: t.error_generic_title, description: error.message, variant: "destructive"});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container py-8 flex justify-center items-center min-h-[calc(100vh-150px)]">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container py-8 text-center">
+        <ListChecks className="mx-auto h-16 w-16 text-red-400 mb-4" />
+        <h1 className="text-2xl font-bold text-red-600 mb-4">{t.error_generic_title || "Error"}</h1>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <Button onClick={() => navigate(createPageUrl("Home"))}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {t.back_to_home_button || "Go to Home"}
+        </Button>
+      </div>
+    );
+  }
+  
+  if (!playlist) {
+     return ( // Should ideally be caught by error state, but as a fallback
+      <div className="container py-8 text-center">
+        <p>{t.shared_playlist_not_found_error || "Playlist not found."}</p>
+         <Button onClick={() => navigate(createPageUrl("Home"))}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {t.back_to_home_button || "Go to Home"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="mb-6">
+         <Button variant="ghost" onClick={() => navigate(createPageUrl("Home"))} className="mb-4 px-2">
+          <ArrowLeft className="mr-2 h-4 w-4" /> {t.back_to_home_button || "Back to Home"}
+        </Button>
+        <div className="p-4 md:p-6 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">{playlist.name}</h1>
+            {playlist.description && (
+                <p className="text-gray-700 dark:text-gray-300 mb-1">{playlist.description}</p>
+            )}
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+                {videos.length} {videos.length === 1 ? (t.video_singular || "video") : (t.video_plural || "videos")}
+            </p>
+            {/* Add a "Play All" button if desired */}
+        </div>
+      </div>
+
+      {videos.length === 0 ? (
+        <div className="text-center py-12 border border-dashed rounded-lg">
+            <p className="text-gray-500">{t.shared_playlist_empty || "This shared playlist currently has no videos."}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+          {videos.map(video => (
+            <Card key={video.id} className="overflow-hidden group hover:shadow-lg transition-shadow duration-300">
+              <div className="aspect-video relative">
+                <img
+                  src={video.thumbnailUrl || video.thumbnail || `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
+                  alt={video.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.src = `https://img.youtube.com/vi/${video.videoId}/default.jpg`;
+                  }}
+                />
+                <div 
+                    className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 flex items-center justify-center cursor-pointer"
+                    onClick={() => navigate(`${createPageUrl("Watch")}?id=${video.id}`)}
+                >
+                  <Play className="h-12 w-12 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </div>
+              </div>
+              <CardContent className="p-3">
+                <h3 className="font-semibold text-sm line-clamp-2 h-10">{video.title}</h3>
+                {video.channelTitle && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">{video.channelTitle}</p>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

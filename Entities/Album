@@ -1,0 +1,91 @@
+{
+  "name": "Album",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the album"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the album",
+      "nullable": true
+    },
+    "photoIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of Photo entity IDs in this album",
+      "default": []
+    },
+    "coverPhotoId": {
+      "type": "string",
+      "description": "ID of the photo to use as album cover",
+      "nullable": true
+    },
+    "musicFileUrl": {
+      "type": "string",
+      "description": "URL of the background music file for slideshow",
+      "nullable": true
+    },
+    "musicFileName": {
+      "type": "string",
+      "description": "Original name of the music file",
+      "nullable": true
+    },
+    "isKidFriendly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this album is approved for kids mode"
+    },
+    "slideshowSettings": {
+      "type": "object",
+      "properties": {
+        "transitionDuration": {
+          "type": "number",
+          "default": 3,
+          "description": "Duration each photo is shown in seconds"
+        },
+        "transitionEffect": {
+          "type": "string",
+          "enum": [
+            "crossfade",
+            "slide",
+            "zoom",
+            "flip",
+            "cube",
+            "spiral"
+          ],
+          "default": "crossfade",
+          "description": "Transition effect between photos"
+        },
+        "shuffle": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to shuffle photos in slideshow"
+        },
+        "loop": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to loop the slideshow"
+        }
+      },
+      "default": {
+        "transitionDuration": 3,
+        "transitionEffect": "crossfade",
+        "shuffle": false,
+        "loop": true
+      }
+    },
+    "createdDate": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date when the album was created"
+    }
+  },
+  "required": [
+    "name",
+    "createdDate"
+  ]
+}

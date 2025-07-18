@@ -1,0 +1,252 @@
+
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { createPageUrl } from "@/utils";
+import { 
+  Film,
+  Star,
+  StarOff,
+  Users,
+  UserX,
+  PencilLine,
+  Trash2,
+  MoreVertical,
+  ListVideo,
+  Check,
+  Bookmark
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useTranslation } from "./LanguageProvider";
+
+// Helper function to decode HTML entities from video titles
+const decodeHtmlEntities = (text) => {
+  if (!text) return '';
+  if (typeof window === 'undefined') {
+    // Basic server-side fallback for environments without DOM
+    return text
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+};
+
+export default function VideoCard(props) {
+  const { 
+    video, 
+    onClickOverride,
+    onEditVideo,
+    onToggleFavorite,
+    onDeleteVideo,
+    onToggleKidFriendly,
+    onAddToPlaylist,
+    onToggleWatchLater, // Add this new prop
+    hideActions = false,
+    selectable = false,
+    isSelected = false,
+    onSelectToggle,
+    playlistIdContext = null
+  } = props;
+  
+  const { t } = useTranslation();
+
+  if (!video) {
+    return null;
+  }
+
+  const handleClick = (e) => {
+    // If in selection mode, handle selection
+    if (selectable) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (onSelectToggle) onSelectToggle(video);
+      return;
+    }
+    
+    // Prevent card click if an action button was clicked
+    if (e.target.closest('button') || e.target.closest('[role="menuitem"]')) {
+      e.stopPropagation();
+      return;
+    }
+    
+    // For other clicks on the card (not on buttons/menu items)
+    e.preventDefault();
+    if (onClickOverride) {
+      onClickOverride(video);
+    } else {
+      window.location.href = `${createPageUrl("Watch")}?id=${video.id}${playlistIdContext ? `&playlistId=${playlistIdContext}` : ''}`;
+    }
+  };
+
+  const thumbnail = video.thumbnail || 
+    (video.sourceType === 'youtube' && video.videoId 
+      ? `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg` 
+      : null);
+
+  return (
+    <Card 
+      className={`overflow-hidden hover:shadow-lg transition-all duration-200 flex flex-col cursor-pointer relative ${
+        selectable ? 'hover:ring-2 hover:ring-blue-400' : ''
+      } ${isSelected ? 'ring-2 ring-blue-600' : ''}`}
+      onClick={handleClick}
+    >
+      {/* Selection Overlay */}
+      {selectable && (
+        <div 
+          className="absolute top-2 right-2 z-10 p-2 bg-white rounded-full shadow-md"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onSelectToggle) onSelectToggle(video);
+          }}
+        >
+          <div 
+            className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors
+              ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}
+          >
+            {isSelected && <Check className="h-3 w-3 text-white" />}
+          </div>
+        </div>
+      )}
+
+      <div className="aspect-video bg-gray-100 relative">
+        {thumbnail ? (
+          <img
+            src={thumbnail}
+            alt={video.title || 'Video thumbnail'}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Film className="h-12 w-12 text-gray-400" />
+          </div>
+        )}
+        {video.sourceType === 'youtube' && (
+          <div className="absolute bottom-0 right-0 pointer-events-none z-10">
+            <img
+              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/8298ac3e9_Youtube-Transparent-Image.png"
+              alt="YouTube"
+              className="h-8 w-8"
+              title="Sourced from YouTube"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="p-3 flex flex-col flex-grow">
+        <div className="flex justify-between items-start">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium text-sm line-clamp-2">
+              {decodeHtmlEntities(video.title) || t.untitled_video}
+            </h3>
+            {video.channelTitle && (
+              <p className="text-xs text-gray-500 mt-1">{video.channelTitle}</p>
+            )}
+          </div>
+
+          {!hideActions && !selectable && onEditVideo && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-1">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel>{t.video_actions_label}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onEditVideo(video)}>
+                    <PencilLine className="mr-2 h-4 w-4" />
+                    <span>{t.edit}</span>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem onClick={() => onToggleFavorite(video)}>
+                    {video.favorite ? (
+                      <>
+                        <Star className="mr-2 h-4 w-4 text-yellow-500" />
+                        <span>{t.unfavorite}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Star className="mr-2 h-4 w-4 text-gray-500" />
+                        <span>{t.favorite}</span>
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  
+                  {onToggleWatchLater && (
+                    <DropdownMenuItem onClick={() => onToggleWatchLater(video)}>
+                      <Bookmark className="mr-2 h-4 w-4" />
+                      <span>
+                        {video.watchStatus === 'watch-later' 
+                          ? t.remove_from_watch_later
+                          : t.add_to_watch_later}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuItem onClick={() => onToggleKidFriendly(video)}>
+                    {video.kidFriendly ? (
+                      <>
+                        <UserX className="mr-2 h-4 w-4" />
+                        <span>{t.remove_from_kids_mode}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>{t.add_to_kids_mode}</span>
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  
+                  {onAddToPlaylist && (
+                    <DropdownMenuItem onClick={() => onAddToPlaylist(video)}>
+                      <ListVideo className="mr-2 h-4 w-4" />
+                      <span>{t.add_to_playlist}</span>
+                    </DropdownMenuItem>
+                  )}
+                  
+                  <DropdownMenuSeparator />
+                  
+                  <DropdownMenuItem 
+                    onClick={() => onDeleteVideo(video)}
+                    className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    <span>{t.delete}</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-1 mt-auto pt-2">
+          {video.favorite && (
+            <div className="text-yellow-500 bg-yellow-100/50 px-1.5 py-0.5 rounded-full text-xs flex items-center border border-yellow-300/50">
+              <Star className="h-3 w-3 mr-1" />
+              <span>{t.favorite}</span>
+            </div>
+          )}
+          {video.kidFriendly && (
+            <div className="text-green-600 bg-green-100/50 px-1.5 py-0.5 rounded-full text-xs flex items-center border border-green-300/50">
+              <Users className="h-3 w-3 mr-1" />
+              <span>{t.kids}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}

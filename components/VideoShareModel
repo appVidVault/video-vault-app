@@ -1,0 +1,173 @@
+import React, { useState, useEffect } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Filter, RotateCcw, Star, Users } from "lucide-react";
+import { Category } from "@/entities/Category"; // Import Category entity
+import { useTranslation } from "./LanguageProvider";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export default function VideoFilter({ filters, setFilters, videos = [] }) {
+  const [categories, setCategories] = useState([]);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        // Use Category entity if available
+        if (typeof Category !== 'undefined' && Category.list) {
+          const fetchedCategories = await Category.list();
+          setCategories(fetchedCategories.map(cat => cat.name).sort());
+        } else {
+          // Fallback to deriving from videos if Category entity is not fully functional or defined
+          const uniqueCategories = videos
+            .map(v => v.category)
+            .filter(Boolean) // Remove null/undefined
+            .reduce((acc, curr) => acc.includes(curr) ? acc : [...acc, curr], [])
+            .sort();
+          setCategories(uniqueCategories);
+        }
+      } catch (error) {
+        console.error("Error fetching categories for filter:", error);
+        // Fallback if Category.list fails
+        const uniqueCategories = videos
+            .map(v => v.category)
+            .filter(Boolean)
+            .reduce((acc, curr) => acc.includes(curr) ? acc : [...acc, curr], [])
+            .sort();
+        setCategories(uniqueCategories);
+      }
+    };
+    fetchCategories();
+  }, [videos]); // Re-fetch/re-calculate if videos change (e.g., new categories added through videos)
+
+  const handleInputChange = (e) => {
+    setFilters(prev => ({ ...prev, search: e.target.value }));
+  };
+
+  const handleSelectChange = (name, value) => {
+    setFilters(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSwitchChange = (name, checked) => {
+    setFilters(prev => ({ ...prev, [name]: checked }));
+  };
+  
+  const resetFilters = () => {
+    setFilters({
+      search: "",
+      category: "all",
+      watchStatus: "all",
+      sort: "newest",
+      favoritesOnly: false,
+      kidFriendlyOnly: false,
+    });
+  };
+
+  return (
+    <Card className="mb-6 shadow-sm border">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Filter className="h-5 w-5 text-blue-600" />
+          {t.filter_section_title || "Filters & Sort"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+          <div className="col-span-1 md:col-span-2 lg:col-span-3">
+            <Label htmlFor="search-filter">{t.search_videos_placeholder || "Search by title or channel..."}</Label>
+            <Input
+              id="search-filter"
+              type="text"
+              placeholder={t.search_videos_placeholder || "Search by title or channel..."}
+              value={filters.search}
+              onChange={handleInputChange}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="category-filter">{t.category_filter_label || "Category"}</Label>
+            <Select
+              value={filters.category}
+              onValueChange={(value) => handleSelectChange("category", value)}
+            >
+              <SelectTrigger id="category-filter">
+                <SelectValue placeholder={t.all_categories_option || "All Categories"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t.all_categories_option || "All Categories"}</SelectItem>
+                {categories.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+                <SelectItem value="uncategorized">{t.no_category_option || "Uncategorized"}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="status-filter">{t.watch_status_filter_label || "Watch Status"}</Label>
+            <Select
+              value={filters.watchStatus}
+              onValueChange={(value) => handleSelectChange("watchStatus", value)}
+            >
+              <SelectTrigger id="status-filter">
+                <SelectValue placeholder={t.all_statuses_option || "All Statuses"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t.all_statuses_option || "All Statuses"}</SelectItem>
+                <SelectItem value="in-progress">{t.in_progress_option || "In Progress"}</SelectItem>
+                <SelectItem value="completed">{t.completed_option || "Completed"}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="sort-filter">{t.sort_by_filter_label || "Sort By"}</Label>
+            <Select
+              value={filters.sort}
+              onValueChange={(value) => handleSelectChange("sort", value)}
+            >
+              <SelectTrigger id="sort-filter">
+                <SelectValue placeholder={t.newest_option || "Newest First"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">{t.newest_option || "Newest First"}</SelectItem>
+                <SelectItem value="oldest">{t.oldest_option || "Oldest First"}</SelectItem>
+                <SelectItem value="title">{t.title_az_option || "Title (A-Z)"}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 col-span-1 md:col-span-2 lg:col-span-3 pt-2">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="favorites-only"
+                checked={filters.favoritesOnly}
+                onCheckedChange={(checked) => handleSwitchChange("favoritesOnly", checked)}
+              />
+              <Label htmlFor="favorites-only" className="flex items-center gap-1.5 cursor-pointer">
+                <Star className="h-4 w-4 text-yellow-500"/> {t.favorites_only_label || "Favorites Only"}
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="kidfriendly-only"
+                checked={filters.kidFriendlyOnly}
+                onCheckedChange={(checked) => handleSwitchChange("kidFriendlyOnly", checked)}
+              />
+              <Label htmlFor="kidfriendly-only" className="flex items-center gap-1.5 cursor-pointer">
+                 <Users className="h-4 w-4 text-purple-500"/> {t.kid_friendly_only_label || "Kid Friendly Only"}
+              </Label>
+            </div>
+            <Button variant="outline" onClick={resetFilters} className="w-full sm:w-auto">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              {t.reset_filters_button || "Reset Filters"}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

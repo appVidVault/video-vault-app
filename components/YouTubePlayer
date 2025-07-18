@@ -1,0 +1,169 @@
+import React, { forwardRef, useImperativeHandle, useState, useRef, useEffect } from "react";
+
+const YouTubePlayer = forwardRef(({ 
+  videoId, 
+  autoplay = false, 
+  volume = 0.8, // YouTube API uses 0-100, so we'll convert
+  isMuted = false,
+  onPlayerReady, // Changed from onReady to match convention
+  onVideoEnded,  // Changed from onEnded
+  onTimeUpdate,
+  onDurationChange,
+  onError
+}, ref) => {
+  const playerContainerId = `youtube-player-${videoId}-${Math.random().toString(36).substring(7)}`;
+  const playerRefInternal = useRef(null); // To store the YT.Player instance
+  const [isReady, setIsReady] = useState(false);
+  const timeUpdateIntervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!videoId) {
+      if (onError) onError("Missing YouTube video ID");
+      return;
+    }
+
+    const loadYouTubeAPI = () => {
+      if (window.YT && window.YT.Player) {
+        createPlayer();
+      } else {
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        window.onYouTubeIframeAPIReady = createPlayer;
+      }
+    };
+
+    const createPlayer = () => {
+      if (playerRefInternal.current) { // Destroy existing player if any
+          playerRefInternal.current.destroy();
+      }
+      try {
+          playerRefInternal.current = new window.YT.Player(playerContainerId, {
+            height: '100%',
+            width: '100%',
+            videoId: videoId,
+            playerVars: {
+              autoplay: autoplay ? 1 : 0,
+              controls: 0, // We'll build custom controls
+              rel: 0,
+              showinfo: 0,
+              modestbranding: 1,
+              iv_load_policy: 3,
+              playsinline: 1 // Important for iOS
+            },
+            events: {
+              'onReady': onPlayerReadyEvent,
+              'onStateChange': onPlayerStateChangeEvent,
+              'onError': onPlayerErrorEvent
+            }
+          });
+      } catch(e) {
+        console.error("YT Player creation error:", e);
+        if(onError) onError("Failed to create YouTube player: " + e.message);
+      }
+    };
+
+    const onPlayerReadyEvent = (event) => {
+      setIsReady(true);
+      // Apply initial volume and mute state
+      event.target.setVolume(volume * 100); // YT volume is 0-100
+      if (isMuted) {
+        event.target.mute();
+      } else {
+        event.target.unMute();
+      }
+      if (onPlayerReady) onPlayerReady(event);
+      if (onDurationChange && event.target.getDuration) {
+          onDurationChange(event.target.getDuration());
+      }
+    };
+
+    const onPlayerStateChangeEvent = (event) => {
+      if (event.data === window.YT.PlayerState.ENDED) {
+        if (onVideoEnded) onVideoEnded();
+      }
+      if (event.data === window.YT.PlayerState.PLAYING) {
+        startReportingTime();
+        if (onDurationChange && event.target.getDuration && event.target.getDuration() > 0) {
+             onDurationChange(event.target.getDuration());
+        }
+      } else {
+        stopReportingTime();
+      }
+    };
+    
+    const onPlayerErrorEvent = (event) => {
+        console.error("YouTube Player Error:", event.data);
+        if (onError) onError(`YouTube Player Error: ${event.data}`);
+    };
+
+    loadYouTubeAPI();
+
+    return () => {
+      stopReportingTime();
+      if (playerRefInternal.current && typeof playerRefInternal.current.destroy === 'function') {
+        try {
+            playerRefInternal.current.destroy();
+        } catch (e) {
+            console.warn("Error destroying YouTube player:", e);
+        }
+      }
+      // Clean up the global callback to prevent issues if multiple players are on a page or during HMR
+      if (window.onYouTubeIframeAPIReady === createPlayer) {
+          delete window.onYouTubeIframeAPIReady;
+      }
+    };
+  }, [videoId]); // Re-create player if videoId changes
+
+  const startReportingTime = () => {
+    stopReportingTime(); // Clear existing interval
+    if (playerRefInternal.current && typeof playerRefInternal.current.getCurrentTime === 'function') {
+      timeUpdateIntervalRef.current = setInterval(() => {
+        if (onTimeUpdate && playerRefInternal.current && typeof playerRefInternal.current.getCurrentTime === 'function') {
+          onTimeUpdate(playerRefInternal.current.getCurrentTime());
+        }
+      }, 250); // Report time every 250ms
+    }
+  };
+
+  const stopReportingTime = () => {
+    if (timeUpdateIntervalRef.current) {
+      clearInterval(timeUpdateIntervalRef.current);
+      timeUpdateIntervalRef.current = null;
+    }
+  };
+  
+  useEffect(() => {
+    if (isReady && playerRefInternal.current) {
+      playerRefInternal.current.setVolume(volume * 100);
+    }
+  }, [volume, isReady]);
+
+  useEffect(() => {
+    if (isReady && playerRefInternal.current) {
+      if (isMuted) {
+        playerRefInternal.current.mute();
+      } else {
+        playerRefInternal.current.unMute();
+      }
+    }
+  }, [isMuted, isReady]);
+
+  useImperativeHandle(ref, () => ({
+    playVideo: () => playerRefInternal.current?.playVideo(),
+    pauseVideo: () => playerRefInternal.current?.pauseVideo(),
+    seekTo: (seconds) => playerRefInternal.current?.seekTo(seconds, true),
+    setVolume: (vol) => playerRefInternal.current?.setVolume(vol * 100),
+    setMuted: (muted) => {
+      if (muted) playerRefInternal.current?.mute();
+      else playerRefInternal.current?.unMute();
+    },
+    getDuration: () => playerRefInternal.current?.getDuration() || 0,
+    getCurrentTime: () => playerRefInternal.current?.getCurrentTime() || 0,
+  }));
+
+  return <div id={playerContainerId} className="w-full h-full bg-black"></div>;
+});
+
+export default YouTubePlayer;

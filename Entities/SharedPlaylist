@@ -1,0 +1,39 @@
+{
+  "name": "SharedPlaylist",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the shared playlist"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the shared playlist"
+    },
+    "videos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of video IDs in the playlist"
+    },
+    "shareCode": {
+      "type": "string",
+      "description": "Unique code for sharing this playlist"
+    },
+    "createdBy": {
+      "type": "string",
+      "description": "Email of the user who created the playlist"
+    },
+    "isPublic": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether the playlist is public or private"
+    }
+  },
+  "required": [
+    "name",
+    "videos",
+    "shareCode"
+  ]
+}

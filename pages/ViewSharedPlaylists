@@ -1,0 +1,248 @@
+import React, { useState, useEffect } from "react";
+import { Playlist } from "@/entities/Playlist";
+import { Video } from "@/entities/Video";
+import { User } from "@/entities/User"; // Import User entity
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card"; // Removed unused CardHeader, CardTitle, CardDescription
+import { ArrowLeft, Film, Loader2, AlertTriangle, Lock, Save } from "lucide-react"; // Added Save icon
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { useToast } from "@/components/ui/use-toast";
+// Removed VideoCard import as SimpleVideoCard is defined locally
+import { useTranslation } from "../components/LanguageProvider";
+
+export default function ViewSharedPlaylist() {
+  const [playlist, setPlaylist] = useState(null);
+  const [playlistVideos, setPlaylistVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [currentUser, setCurrentUser] = useState(null); // State for current user
+  const [isSaving, setIsSaving] = useState(false); // State for save operation
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const fetchUserAndPlaylist = async () => {
+      setLoading(true);
+      try {
+        const user = await User.me();
+        setCurrentUser(user);
+      } catch (userError) {
+        // User is not logged in, that's fine for viewing
+        setCurrentUser(null); 
+      }
+      await loadSharedPlaylist();
+      setLoading(false); // Ensure loading is false after both attempts
+    };
+    fetchUserAndPlaylist();
+  }, [location.search]);
+
+  const loadSharedPlaylist = async () => {
+    // setLoading(true); // Loading is handled in the wrapper useEffect
+    setError("");
+    setPlaylist(null);
+    setPlaylistVideos([]);
+
+    try {
+      const params = new URLSearchParams(location.search);
+      const shareCode = params.get('code');
+
+      if (!shareCode) {
+        setError(t.no_share_code_provided || "No share code provided.");
+        // setLoading(false); // Handled by wrapper
+        return;
+      }
+
+      const matchingPlaylists = await Playlist.filter({ shareCode: shareCode, isShared: true });
+
+      if (!matchingPlaylists || matchingPlaylists.length === 0) {
+        setError(t.playlist_not_found_or_not_shared || "Playlist not found, or it's no longer shared.");
+        // setLoading(false); // Handled by wrapper
+        return;
+      }
+      
+      const sharedPlaylistData = matchingPlaylists[0];
+      setPlaylist(sharedPlaylistData);
+
+      if (sharedPlaylistData.videoIds && sharedPlaylistData.videoIds.length > 0) {
+        const allVideos = await Video.list();
+        const videosInPlaylist = sharedPlaylistData.videoIds
+          .map(id => allVideos.find(v => v.id === id))
+          .filter(Boolean);
+        setPlaylistVideos(videosInPlaylist);
+      } else {
+        setPlaylistVideos([]);
+      }
+
+    } catch (err) {
+      console.error("Error loading shared playlist:", err);
+      setError(t.error_loading_shared_playlist || "An error occurred while trying to load the playlist.");
+      toast({
+        title: t.error || "Error",
+        description: t.error_loading_shared_playlist_desc || "Could not load the shared playlist.",
+        variant: "destructive",
+      });
+    } 
+    // finally { // Handled by wrapper
+    //   setLoading(false);
+    // }
+  };
+
+  const handleSavePlaylist = async () => {
+    if (!currentUser || !playlist) return;
+
+    setIsSaving(true);
+    try {
+      const newPlaylistData = {
+        name: `${playlist.name} (Copy)`, // Append (Copy) to avoid name clashes
+        description: playlist.description,
+        videoIds: playlist.videoIds || [],
+        isKidFriendly: playlist.isKidFriendly || false,
+        createdDate: new Date().toISOString(),
+        // Share code and isShared will be default (null and false)
+      };
+
+      await Playlist.create(newPlaylistData);
+
+      toast({
+        title: t.playlist_saved_title || "Playlist Saved",
+        description: t('playlist_saved_desc', { playlistName: newPlaylistData.name, videoCount: playlist.videoIds?.length || 0 }) || `"${newPlaylistData.name}" has been saved to your account with ${playlist.videoIds?.length || 0} videos.`,
+      });
+      navigate(createPageUrl("MyPlaylists")); // Navigate to user's playlists
+    } catch (saveError) {
+      console.error("Error saving playlist:", saveError);
+      toast({
+        title: t.error_saving_playlist_title || "Error Saving Playlist",
+        description: t.error_saving_playlist_desc || "Could not save the playlist to your account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const SimpleVideoCard = ({ video }) => (
+    <Card className="overflow-hidden group">
+      <Link to={`${createPageUrl("Watch")}?id=${video.id}`} target="_blank" rel="noopener noreferrer">
+        <div className="aspect-video cursor-pointer">
+          <img
+            src={video.thumbnail || `https://img.youtube.com/vi/${video.videoId}/mqdefault.jpg`}
+            alt={video.title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        </div>
+        <CardContent className="p-3">
+          <h3 className="font-medium line-clamp-2 text-sm group-hover:text-blue-600 transition-colors">
+            {video.title || (t.untitled_video || "Untitled Video")}
+          </h3>
+          {video.channelTitle && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-1">{video.channelTitle}</p>
+          )}
+        </CardContent>
+      </Link>
+    </Card>
+  );
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-4 flex flex-col justify-center items-center min-h-[calc(100vh-8rem)]">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-4" />
+        <p className="text-lg text-gray-600">{t.loading_playlist || "Loading playlist..."}</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 flex flex-col justify-center items-center min-h-[calc(100vh-8rem)] text-center">
+        <AlertTriangle className="h-16 w-16 text-red-500 mb-6" />
+        <h2 className="text-2xl font-semibold text-red-700 mb-3">{t.oops_error_occurred || "Oops! An Error Occurred."}</h2>
+        <p className="text-gray-600 mb-8 max-w-md">{error}</p>
+        <Link to={createPageUrl("Home")}>
+          <Button variant="outline">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {t.back_to_home || "Back to Home"}
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (!playlist) {
+    return (
+      <div className="container mx-auto p-4 flex flex-col justify-center items-center min-h-[calc(100vh-8rem)] text-center">
+        <Lock className="h-16 w-16 text-gray-400 mb-6" />
+         <h2 className="text-2xl font-semibold text-gray-700 mb-3">{t.playlist_unavailable_title || "Playlist Unavailable"}</h2>
+        <p className="text-gray-600 mb-8">{t.playlist_unavailable_desc || "This playlist could not be loaded. It might have been unshared or removed."}</p>
+        <Link to={createPageUrl("Home")}>
+          <Button variant="outline">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {t.back_to_home || "Back to Home"}
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4">
+      <div className="mb-8">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-2">
+            <h1 className="text-3xl font-bold">{playlist.name}</h1>
+            <div className="flex items-center gap-2">
+              {currentUser && (
+                <Button 
+                  onClick={handleSavePlaylist} 
+                  disabled={isSaving}
+                  className="bg-green-600 hover:bg-green-700 text-white font-medium"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  {t.save_to_my_account || "Save to My Account"}
+                </Button>
+              )}
+              {!currentUser && (
+                <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-md">
+                  {t.sign_in_to_save_playlist || "Sign in to save this playlist to your account"}
+                </div>
+              )}
+              <Link to={createPageUrl("Home")}>
+                  <Button variant="outline" size="sm">
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      {t.back_to_home || "Back to Home"}
+                  </Button>
+              </Link>
+            </div>
+        </div>
+        {playlist.description && (
+          <p className="text-gray-600 mt-1 text-lg">{playlist.description}</p>
+        )}
+        <p className="text-sm text-gray-400 mt-3">
+          {t.shared_by || "Shared by"}: {playlist.created_by || (t.anonymous_user || "Anonymous User")} • 
+          {playlist.videoIds?.length || 0} {t.videos || "videos"}
+        </p>
+      </div>
+
+      {playlistVideos.length === 0 ? (
+        <div className="text-center py-16 border border-dashed rounded-lg bg-gray-50">
+          <Film className="mx-auto h-16 w-16 text-gray-400 mb-6" />
+          <h3 className="text-xl font-medium text-gray-700 mb-2">{t.empty_playlist_title || "This playlist is empty"}</h3>
+          <p className="text-gray-500">
+            {t.empty_shared_playlist_desc || "There are no videos in this shared playlist."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
+          {playlistVideos.map(video => (
+            <SimpleVideoCard key={video.id} video={video} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

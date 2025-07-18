@@ -1,0 +1,250 @@
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Playlist } from '@/entities/Playlist';
+import { User } from '@/entities/User';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { ArrowLeft, Loader2, Save, ShieldAlert, KeyRound } from 'lucide-react';
+import InlinePinInput from '../components/InlinePinInput';
+import { useTranslation } from '../components/LanguageProvider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+export default function ManagePublicLibrary() {
+  const [playlists, setPlaylists] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const pinButtonRef = useRef(null);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { t } = useTranslation();
+
+  // Category icon configuration
+  const categoryIcons = {
+    'KCV': { 
+      name: 'Kosher Content Viewing',
+      icon: 'KCV', 
+      color: 'bg-blue-500 text-white'
+    },
+    'SKZ': { 
+      name: 'Safe Kids Zone',
+      icon: 'SKZ', 
+      color: 'bg-green-500 text-white'
+    }
+  };
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const user = await User.me();
+        if (user && user.role === 'admin') {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+          setLoading(false);
+        }
+      } catch (error) {
+        setIsAdmin(false);
+        setLoading(false);
+      }
+    };
+    checkAdminStatus();
+  }, []);
+
+  const loadPlaylists = async () => {
+    setLoading(true);
+    try {
+      const allPlaylists = await Playlist.list();
+      setPlaylists(allPlaylists);
+    } catch (error) {
+      toast({ 
+        title: t.error || "Error", 
+        description: t.could_not_load_playlists || "Could not load playlists.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePinSubmit = (pin) => {
+    const correctPin = localStorage.getItem('videovault-kids-mode-pin') || '1234';
+    if (pin === correctPin) {
+      setIsAuthenticated(true);
+      setShowPinInput(false);
+      loadPlaylists();
+      return true;
+    }
+    return false;
+  };
+
+  const handlePlaylistChange = (id, field, value) => {
+    setPlaylists(prev =>
+      prev.map(p => (p.id === id ? { ...p, [field]: value } : p))
+    );
+  };
+
+  const handleIconToggle = (playlistId, iconKey) => {
+    setPlaylists(prev =>
+      prev.map(p => {
+        if (p.id === playlistId) {
+          const currentIcons = p.libraryIcons || [];
+          const newIcons = currentIcons.includes(iconKey)
+            ? currentIcons.filter(key => key !== iconKey)
+            : [...currentIcons, iconKey];
+          return { ...p, libraryIcons: newIcons };
+        }
+        return p;
+      })
+    );
+  };
+
+  const handleSaveChanges = async () => {
+    setIsSaving(true);
+    try {
+      const updatePromises = playlists.map(p => Playlist.update(p.id, p));
+      await Promise.all(updatePromises);
+      toast({ 
+        title: t.success || "Success", 
+        description: t.public_library_settings_saved || "Public library settings saved." 
+      });
+    } catch (error) {
+      toast({ 
+        title: t.error || "Error", 
+        description: t.could_not_save_changes || "Could not save changes.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!isAdmin && !loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-center p-4">
+        <ShieldAlert className="h-16 w-16 text-red-500 mb-4" />
+        <h1 className="text-2xl font-bold">{t.access_denied || "Access Denied"}</h1>
+        <p className="text-gray-600 mt-2">
+          {t.admin_required || "You must be an administrator to access this page."}
+        </p>
+        <Button onClick={() => navigate(createPageUrl('Home'))} className="mt-6">
+          {t.go_to_home || "Go to Home"}
+        </Button>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-center p-4">
+        <KeyRound className="h-16 w-16 text-blue-500 mb-4" />
+        <h1 className="text-2xl font-bold">{t.admin_verification || "Admin Verification"}</h1>
+        <p className="text-gray-600 mt-2 mb-6">
+          {t.enter_security_pin_manage_library || "Please enter your security PIN to manage the public library."}
+        </p>
+        <Button ref={pinButtonRef} onClick={() => setShowPinInput(true)}>
+          {t.enter_pin || "Enter PIN"}
+        </Button>
+        <InlinePinInput
+          isVisible={showPinInput}
+          onPinSubmit={handlePinSubmit}
+          onCancel={() => setShowPinInput(false)}
+          targetRef={pinButtonRef}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate(createPageUrl('MyPlaylists'))}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold">{t.manage_public_library || "Manage Public Library"}</h1>
+        </div>
+        <Button onClick={handleSaveChanges} disabled={isSaving}>
+          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          {t.save_changes || "Save Changes"}
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        {loading ? (
+          <div className="text-center py-10">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+            <p className="mt-4 text-gray-600">{t.loading || "Loading..."}</p>
+          </div>
+        ) : (
+          playlists.map(playlist => (
+            <div key={playlist.id} className="border p-4 rounded-lg flex flex-col md:flex-row items-start md:items-center gap-4">
+              <div className="flex-grow">
+                <p className="font-semibold">{playlist.name}</p>
+                <p className="text-sm text-gray-500">{playlist.description}</p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">{t.public || "Public"}:</Label>
+                  <Button
+                    variant={playlist.isPublicLibrary ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePlaylistChange(playlist.id, 'isPublicLibrary', !playlist.isPublicLibrary)}
+                    className="w-20 h-8"
+                  >
+                    {playlist.isPublicLibrary ? (t.on || "On") : (t.off || "Off")}
+                  </Button>
+                </div>
+                
+                {/* Icon Selector */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">{t.icons || "Icons"}:</Label>
+                  <div className="flex items-center gap-2">
+                    {Object.entries(categoryIcons).map(([key, config]) => {
+                      const isSelected = (playlist.libraryIcons || []).includes(key);
+                      return (
+                        <Button
+                          key={key}
+                          variant={isSelected ? 'default' : 'outline'}
+                          size="icon"
+                          onClick={() => handleIconToggle(playlist.id, key)}
+                          disabled={!playlist.isPublicLibrary}
+                          title={config.name}
+                          // If selected, apply config.color (background and text color) to the button itself.
+                          className={`h-8 w-8 ${isSelected ? config.color : ''}`}
+                        >
+                           {/* Inner icon div: When selected, make its background transparent and inherit text color.
+                               When not selected, apply its own config.color (background and text color). */}
+                           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                             isSelected ? 'bg-transparent text-current' : config.color
+                           }`}>
+                             {config.icon}
+                           </div>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Manual Category Input (independent from icon) */}
+                <Input
+                  placeholder={t.category_placeholder || "Category (e.g., Music)"}
+                  value={playlist.libraryCategory || ''}
+                  onChange={(e) => handlePlaylistChange(playlist.id, 'libraryCategory', e.target.value)}
+                  className="w-full sm:w-48"
+                  disabled={!playlist.isPublicLibrary}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
