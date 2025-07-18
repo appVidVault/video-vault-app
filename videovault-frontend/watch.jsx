@@ -16,7 +16,7 @@ import { useToast } from "@/components/ui/use-toast";
 import YouTubePlayer from "../components/YouTubePlayer";
 import Html5VideoPlayer from "../components/Html5VideoPlayer";
 import { useTranslation } from "../components/LanguageProvider";
-import VideoCard from "../components/VideoCard";
+import VideoCard from "./VideoCard";
 import {
   Tooltip,
   TooltipContent,

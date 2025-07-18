@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { VideoIdCache } from "../components/VideoIdCache";
-import VideoCard from "../components/VideoCard";
+import VideoCard from "./VideoCard";
 import VideoForm from "../components/VideoForm"; // Import VideoForm
 import AddToPlaylistDialog from "../components/AddToPlaylistDialog"; // Import AddToPlaylistDialog
 import FunLoader from '../components/FunLoader'; // Import FunLoader

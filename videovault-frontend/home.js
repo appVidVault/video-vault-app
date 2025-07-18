@@ -18,7 +18,7 @@ import {
   RefreshCw,
   Plus 
 } from "lucide-react";
-import VideoCard from "../components/VideoCard";
+import VideoCard from "./VideoCard";
 import { useToast } from "@/components/ui/use-toast";
 import VideoForm from "../components/VideoForm";
 import LanguageSelector from "../components/LanguageSelector";

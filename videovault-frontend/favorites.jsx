@@ -5,7 +5,7 @@ import { Star, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
-import VideoCard from "../components/VideoCard";
+import VideoCard from "./VideoCard";
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslation } from "../components/LanguageProvider";
 import AddToPlaylistDialog from "../components/AddToPlaylistDialog";

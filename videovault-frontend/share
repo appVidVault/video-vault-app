@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle, Share2, ArrowLeft, List, Grid, Loader2, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import VideoCard from "../components/VideoCard";
+import VideoCard from "./VideoCard";
 import VideoFilter from "../components/VideoFilter";
 import SelectionManager from "../components/SelectionManager";
 import SharePlaylistDialog from "../components/SharePlaylistDialog"; // Changed from VideoShareModal

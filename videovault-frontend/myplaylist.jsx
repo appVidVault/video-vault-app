@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import SharePlaylistDialog from "../components/SharePlaylistDialog";
-import VideoCard from "../components/VideoCard";
+import VideoCard from "./VideoCard";
 import { useTranslation } from "../components/LanguageProvider";
 
 export default function MyPlaylists() {
